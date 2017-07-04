@@ -97,6 +97,15 @@ string CompilerMSL::compile()
 	stage_uniforms_var_id = add_interface_block(StorageClassUniformConstant);
 	stage_workgroup_var_id = add_interface_block(StorageClassWorkgroup);
 
+	if (stage_workgroup_var_id) {
+		auto &wg_var = get<SPIRVariable>(stage_workgroup_var_id);
+		auto &entry_func = get<SPIRFunction>(entry_point);
+		entry_func.add_local_variable(stage_workgroup_var_id);
+
+		uint32_t next_id = increase_bound_by(1);
+		wg_var.initializer = next_id;
+	}
+
 	// Convert the use of global variables to recursively-passed function parameters
 	localize_global_variables();
 	extract_global_variables_from_functions();
@@ -275,6 +284,16 @@ void CompilerMSL::extract_global_variables_from_function(uint32_t func_id, std::
 
 				break;
 			}
+			case OpStore:
+			{
+				// Direct store to a workgroup shared variable can happen
+
+				uint32_t base_id = ops[0];
+				if (global_var_ids.find(base_id) != global_var_ids.end())
+					added_arg_ids.insert(base_id);
+
+				break;
+			}
 			case OpFunctionCall:
 			{
 				uint32_t inner_func_id = ops[2];
@@ -404,11 +423,6 @@ uint32_t CompilerMSL::add_interface_block(StorageClass storage)
 
 	set_name(ib_type_id, get_entry_point_name() + "_" + ib_var_ref);
 	set_name(ib_var_id, ib_var_ref);
-
-	if (storage == StorageClassWorkgroup) {
-		// flattening is unnecessary for workgroup memory interface block
-		// return ib_var_id;
-	}
 
 	for (auto p_var : vars)
 	{
@@ -1596,6 +1610,14 @@ void CompilerMSL::emit_function_prototype(SPIRFunction &func, uint64_t)
 			auto &so_type = get<SPIRType>(so_var.basetype);
 			set<SPIRExpression>(so_var.initializer, "{}", so_type.self, true);
 		}
+
+		// ditto for workgroup variables.
+		if (stage_workgroup_var_id)
+		{
+			auto &wg_var = get<SPIRVariable>(stage_workgroup_var_id);
+			auto &wg_type = get<SPIRType>(wg_var.basetype);
+			set<SPIRExpression>(wg_var.initializer, "{}", wg_type.self, true);
+		}
 	}
 
 	for (auto &arg : func.arguments)
@@ -2203,6 +2225,10 @@ string CompilerMSL::get_argument_address_space(const SPIRVariable &argument)
 		           "constant";
 	}
 
+	if (type.storage == StorageClassWorkgroup) {
+		return "threadgroup";
+	}
+
 	return "thread";
 }
 
@@ -2210,18 +2236,6 @@ string CompilerMSL::get_argument_address_space(const SPIRVariable &argument)
 string CompilerMSL::entry_point_args(bool append_comma)
 {
 	string ep_args;
-
-	// Workgroup variables (threadgroup memory in Metal)
-	if (stage_workgroup_var_id)
-	{
-		auto &var = get<SPIRVariable>(stage_workgroup_var_id);
-		auto &type = get<SPIRType>(var.basetype);
-
-		if (!ep_args.empty())
-			ep_args += ", ";
-
-		ep_args += "threadgroup " + type_to_glsl(type) + "& " + to_name(var.self) + " [[threadgroup(0)]]";
-	}
 
 	// Stage-in structure
 	if (stage_in_var_id)
@@ -2387,8 +2401,10 @@ string CompilerMSL::argument_decl(const SPIRFunction::Parameter &arg)
 	bool pointer = type.storage == StorageClassUniformConstant;
 
 	auto &var = get<SPIRVariable>(arg.id);
-	return join(constref ? "const " : "", type_to_glsl(type), pointer ? " " : "& ", to_name(var.self),
-	            type_to_array_glsl(type));
+	bool needs_parenthesis = type.array.size() > 0 && !pointer; // needs to make a reference to an array
+	return join(constref ? "const " : "", type_to_glsl(type), needs_parenthesis ? " (" : "",
+		pointer ? " " : needs_parenthesis ? "&" : "& ", to_name(var.self), needs_parenthesis ? ")" : "",
+	    type_to_array_glsl(type));
 }
 
 // If we're currently in the entry point function, and the object
@@ -2967,6 +2983,18 @@ CompilerMSL::SPVFuncImpl CompilerMSL::get_spv_func_impl(Op opcode, const uint32_
 		break;
 	}
 	return SPVFuncImplNone;
+}
+
+// Add threadgroup qualifier for Workgroup variables
+string CompilerMSL::variable_decl(const SPIRType &type, const string &name, uint32_t id)
+{
+	bool is_workgroup = id && id == stage_workgroup_var_id;
+
+	if (is_workgroup) {
+		return "threadgroup " + CompilerGLSL::variable_decl(type, name, id);
+	} else {
+		return CompilerGLSL::variable_decl(type, name, id);
+	}
 }
 
 // Sort both type and meta member content based on builtin status (put builtins at end),

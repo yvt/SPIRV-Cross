@@ -1,0 +1,43 @@
+#version 450
+shared int simpleVar;
+shared int arrayVar[42];
+struct Struct {
+    int field1, field2;
+};
+shared Struct structVar;
+shared Struct aosVar[6];
+
+// float4x4 cannot be created in the threadgroup address space?
+// (matrix types do not have default constructors for threadgroup)
+// shared mat4 matVar;
+
+void test() {
+    simpleVar = 1;
+    arrayVar[0] = 2;
+    aosVar[3].field1 = 4;
+    aosVar[5].field2 = 6;
+    structVar.field1 = 7;
+    structVar.field1 = 8;
+
+    Struct s = aosVar[0];
+    aosVar[1] = s;
+
+    // matVar = mat4(1.0);
+}
+
+void main() {
+    if (gl_LocalInvocationIndex == 0) {
+        simpleVar = 1;
+        test();
+        arrayVar[0] = 2;
+        aosVar[3].field1 = 4;
+        aosVar[5].field2 = 6;
+        structVar.field1 = 7;
+        structVar.field1 = 8;
+
+        Struct s = aosVar[0];
+        aosVar[1] = s;
+
+        // matVar = mat4(1.0);
+    }
+}

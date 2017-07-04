@@ -139,10 +139,6 @@ public:
 	std::string compile(MSLConfiguration &msl_cfg, std::vector<MSLVertexAttr> *p_vtx_attrs = nullptr,
 	                    std::vector<MSLResourceBinding> *p_res_bindings = nullptr);
 
-	// Returns the minimum required size of the threadgroup memory to dispatch the compiled compute shader.
-	// compile() must have been called first.
-	uint32_t required_threadgroup_memory_length();
-
 protected:
 	void emit_instruction(const Instruction &instr) override;
 	void emit_glsl_op(uint32_t result_type, uint32_t result_id, uint32_t op, const uint32_t *args,
@@ -170,6 +166,7 @@ protected:
 	std::string unpack_expression_type(std::string expr_str, const SPIRType &type) override;
 	std::string bitcast_glsl_op(const SPIRType &result_type, const SPIRType &argument_type) override;
 	bool skip_argument(uint32_t id) const override;
+	std::string variable_decl(const SPIRType &type, const std::string &name, uint32_t id = 0) override;
 
 	void preprocess_op_codes();
 	void localize_global_variables();
