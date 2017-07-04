@@ -90,11 +90,12 @@ string CompilerMSL::compile()
 	// Preprocess OpCodes to extract the need to output additional header content
 	preprocess_op_codes();
 
-	// Create structs to hold input, output and uniform variables
+	// Create structs to hold input, output, workgroup and uniform variables
 	qual_pos_var_name = "";
 	stage_in_var_id = add_interface_block(StorageClassInput);
 	stage_out_var_id = add_interface_block(StorageClassOutput);
 	stage_uniforms_var_id = add_interface_block(StorageClassUniformConstant);
+	stage_workgroup_var_id = add_interface_block(StorageClassWorkgroup);
 
 	// Convert the use of global variables to recursively-passed function parameters
 	localize_global_variables();
@@ -217,7 +218,8 @@ void CompilerMSL::extract_global_variables_from_functions()
 		{
 			auto &var = id.get<SPIRVariable>();
 			if (var.storage == StorageClassInput || var.storage == StorageClassUniform ||
-			    var.storage == StorageClassUniformConstant || var.storage == StorageClassPushConstant)
+			    var.storage == StorageClassUniformConstant || var.storage == StorageClassPushConstant ||
+			    var.storage == StorageClassWorkgroup)
 			{
 				global_var_ids.insert(var.self);
 			}
@@ -392,6 +394,10 @@ uint32_t CompilerMSL::add_interface_block(StorageClass storage)
 		break;
 	}
 
+	case StorageClassWorkgroup:
+		ib_var_ref = stage_workgroup_var_name;
+		break;
+
 	default:
 		break;
 	}
@@ -399,11 +405,16 @@ uint32_t CompilerMSL::add_interface_block(StorageClass storage)
 	set_name(ib_type_id, get_entry_point_name() + "_" + ib_var_ref);
 	set_name(ib_var_id, ib_var_ref);
 
+	if (storage == StorageClassWorkgroup) {
+		// flattening is unnecessary for workgroup memory interface block
+		// return ib_var_id;
+	}
+
 	for (auto p_var : vars)
 	{
 		uint32_t type_id = p_var->basetype;
 		auto &type = get<SPIRType>(type_id);
-		if (type.basetype == SPIRType::Struct)
+		if (type.basetype == SPIRType::Struct && storage != StorageClassWorkgroup)
 		{
 			// Flatten the struct members into the interface struct
 			uint32_t mbr_idx = 0;
@@ -462,12 +473,13 @@ uint32_t CompilerMSL::add_interface_block(StorageClass storage)
 		         type.basetype == SPIRType::Int || type.basetype == SPIRType::UInt ||
 		         type.basetype == SPIRType::Int64 || type.basetype == SPIRType::UInt64 ||
 		         type.basetype == SPIRType::Float || type.basetype == SPIRType::Double ||
-		         type.basetype == SPIRType::Boolean)
+		         type.basetype == SPIRType::Boolean ||
+		         storage == StorageClassWorkgroup)
 		{
 			bool is_builtin = is_builtin_variable(*p_var);
 			BuiltIn builtin = BuiltIn(get_decoration(p_var->self, DecorationBuiltIn));
 
-			if (is_matrix(type))
+			if (is_matrix(type) && storage != StorageClassWorkgroup)
 				exclude_from_stage_in(*p_var);
 
 			else if (!is_builtin || has_active_builtin(builtin, storage))
@@ -996,6 +1008,7 @@ void CompilerMSL::emit_resources()
 
 	emit_interface_block(stage_out_var_id);
 	emit_interface_block(stage_uniforms_var_id);
+	emit_interface_block(stage_workgroup_var_id);
 }
 
 // Emit declarations for the specialization Metal function constants
@@ -2197,6 +2210,18 @@ string CompilerMSL::get_argument_address_space(const SPIRVariable &argument)
 string CompilerMSL::entry_point_args(bool append_comma)
 {
 	string ep_args;
+
+	// Workgroup variables (threadgroup memory in Metal)
+	if (stage_workgroup_var_id)
+	{
+		auto &var = get<SPIRVariable>(stage_workgroup_var_id);
+		auto &type = get<SPIRType>(var.basetype);
+
+		if (!ep_args.empty())
+			ep_args += ", ";
+
+		ep_args += "threadgroup " + type_to_glsl(type) + "& " + to_name(var.self) + " [[threadgroup(0)]]";
+	}
 
 	// Stage-in structure
 	if (stage_in_var_id)

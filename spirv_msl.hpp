@@ -139,6 +139,10 @@ public:
 	std::string compile(MSLConfiguration &msl_cfg, std::vector<MSLVertexAttr> *p_vtx_attrs = nullptr,
 	                    std::vector<MSLResourceBinding> *p_res_bindings = nullptr);
 
+	// Returns the minimum required size of the threadgroup memory to dispatch the compiled compute shader.
+	// compile() must have been called first.
+	uint32_t required_threadgroup_memory_length();
+
 protected:
 	void emit_instruction(const Instruction &instr) override;
 	void emit_glsl_op(uint32_t result_type, uint32_t result_id, uint32_t op, const uint32_t *args,
@@ -230,12 +234,14 @@ protected:
 	uint32_t stage_in_var_id = 0;
 	uint32_t stage_out_var_id = 0;
 	uint32_t stage_uniforms_var_id = 0;
+	uint32_t stage_workgroup_var_id = 0;
 	bool needs_vertex_idx_arg = false;
 	bool needs_instance_idx_arg = false;
 	std::string qual_pos_var_name;
 	std::string stage_in_var_name = "in";
 	std::string stage_out_var_name = "out";
 	std::string stage_uniform_var_name = "uniforms";
+	std::string stage_workgroup_var_name = "workgroup";
 	std::string sampler_name_suffix = "Smplr";
 
 	// OpcodeHandler that handles several MSL preprocessing operations.

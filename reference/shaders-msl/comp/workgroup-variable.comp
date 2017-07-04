@@ -1,0 +1,33 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct Struct
+{
+    int field1;
+    int field2;
+};
+
+struct main0_workgroup
+{
+    int simpleVar;
+    int arrayVar[42];
+    Struct aosVar[6];
+    Struct structVar;
+    float4x4 matVar;
+};
+
+kernel void main0(threadgroup main0_workgroup& workgroup [[threadgroup(0)]])
+{
+    workgroup.simpleVar = 1;
+    workgroup.arrayVar[0] = 2;
+    workgroup.aosVar[3].field1 = 4;
+    workgroup.aosVar[5].field2 = 6;
+    workgroup.structVar.field1 = 7;
+    workgroup.structVar.field1 = 8;
+    Struct s = workgroup.aosVar[0];
+    workgroup.aosVar[1] = s;
+    workgroup.matVar = float4x4(float4(1.0, 0.0, 0.0, 0.0), float4(0.0, 1.0, 0.0, 0.0), float4(0.0, 0.0, 1.0, 0.0), float4(0.0, 0.0, 0.0, 1.0));
+}
+
