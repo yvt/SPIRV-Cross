@@ -123,6 +123,7 @@ string CompilerMSL::compile()
 	backend.swizzle_is_function = false;
 	backend.shared_is_implied = false;
 	backend.native_row_major_matrix = false;
+	backend.flexible_member_array_supported = false;
 
 	uint32_t pass_count = 0;
 	do
