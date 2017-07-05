@@ -1,0 +1,7 @@
+#version 450
+void main() {
+    // barrier() also implies a work group memory barrier in GLSL 4.50
+    barrier();
+
+    // memory barriers are not expressible in MSL
+}

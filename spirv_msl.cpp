@@ -1404,6 +1404,72 @@ void CompilerMSL::emit_instruction(const Instruction &instruction)
 		break;
 	}
 
+	// Compute
+	case OpControlBarrier:
+	{
+		uint32_t exec_scope = get<SPIRConstant>(ops[0]).scalar();
+		// uint32_t mem_scope = get<SPIRConstant>(ops[1]).scalar();
+		uint32_t mem_semantics = get<SPIRConstant>(ops[2]).scalar();
+
+		if (exec_scope == ScopeWorkgroup) {
+			// The memory scope parameter for threadgroup_barrier() is unavailable until MSL 2.0.
+			// there are no MTL counterparts for the memory ordering flags in mem_semantics.
+
+			// HACK: At the point of writing, glslang emits wrong memory semantics flags for
+			// the barrier() function. (See: https://github.com/KhronosGroup/glslang/issues/502)
+			// Specifically, it does not include WorkgroupMemory in the memory semantics flags
+			// when its target is set to GLSL 4.50 and it is processing a compute shader.
+			// To be safe, we modify the flags to include WorkgroupMemory.
+			//
+			// There is another reason to do this: OpMemoryBarrier cannot be directly translated
+			// into MSL. Without this hack, the following common idiom will not work and there
+			// is no other way to accomplish the same thing:
+			//
+			//    groupMemoryBarrier(); barrier();
+			//
+			// TODO: handle a code like `memoryBarrierImage(); barrier();`
+			//
+			mem_semantics |= MemorySemanticsWorkgroupMemoryMask;
+
+			std::string mem_flags;
+			if (mem_semantics & MemorySemanticsWorkgroupMemoryMask) {
+				mem_flags = "mem_flags::mem_threadgroup";
+			}
+			if (mem_semantics & MemorySemanticsImageMemoryMask) {
+				if (!mem_flags.empty()) {
+					mem_flags += " | ";
+				}
+				mem_flags += "mem_flags::mem_texture";
+			}
+			if (mem_semantics & MemorySemanticsUniformMemoryMask) {
+				if (!mem_flags.empty()) {
+					mem_flags += " | ";
+				}
+				mem_flags += "mem_flags::mem_device";
+			}
+			if (mem_flags.empty()) {
+				mem_flags = "mem_flags::mem_none";
+			}
+			statement(join("threadgroup_barrier(", mem_flags, ");"));
+		} else {
+			statement("// unsupported control barrier - execution scope is not Workgroup");
+		}
+		break;
+	}
+
+	case OpMemoryBarrier:
+	{
+		// uint32_t mem_scope = get<SPIRConstant>(ops[0]).scalar();
+		// uint32_t mem_semantics = get<SPIRConstant>(ops[1]).scalar();
+
+		// Unfortunately, there is no way to express a memory barrier alone in MSL.
+		// OpMemoryBarrier is not required to be placed within a uniform control flow whereas
+		// threadgroup_barrier requires that.
+
+		statement("// memory barrier is not supported in MSL");
+		break;
+	}
+
 	// OpOuterProduct
 
 	default:
