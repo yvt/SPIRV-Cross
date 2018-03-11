@@ -5,7 +5,7 @@ using namespace metal;
 
 struct Light
 {
-    float3 Position;
+    packed_float3 Position;
     float Radius;
     float4 Color;
 };
@@ -14,6 +14,13 @@ struct UBO
 {
     float4x4 uMVP;
     Light lights[4];
+};
+
+struct Light_1
+{
+    float3 Position;
+    float Radius;
+    float4 Color;
 };
 
 struct main0_in
@@ -35,7 +42,7 @@ vertex main0_out main0(main0_in in [[stage_in]], constant UBO& _21 [[buffer(0)]]
     out.vColor = float4(0.0);
     for (int i = 0; i < 4; i++)
     {
-        Light light;
+        Light_1 light;
         light.Position = _21.lights[i].Position;
         light.Radius = _21.lights[i].Radius;
         light.Color = _21.lights[i].Color;
